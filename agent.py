@@ -7,6 +7,8 @@ from ddgs import DDGS
 from langgraph.graph import StateGraph, END
 from typing import TypedDict, Annotated
 import operator
+import httpx
+from bs4 import BeautifulSoup
 
 load_dotenv()
 
@@ -24,6 +26,32 @@ class AgentState(TypedDict):
     final_answer: str
 
 # ── 2. TOOLS ──────────────────────────────────────────────
+def fetch_page(url: str, max_chars: int = 3000) -> str:
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; research-agent/1.0)"}
+        response = httpx.get(url, headers=headers, timeout=6, follow_redirects=True)
+
+        if response.status_code != 200:
+            return ""
+
+        soup = BeautifulSoup(response.text, "html.parser")
+
+        # Remove noise - scripts, styles, nav, footer, ads
+        for tag in soup(["script", "style", "nav", "footer", "header",
+                         "aside", "form", "noscript", "iframe"]):
+            tag.decompose()
+        
+        # Extract clean text
+        text = soup.get_text(separator=" ", strip=True)
+
+        # Collapse excessive whitespace
+        import re
+        text = re.sub(r'\s+', ' ', text).strip()
+        return text[:max_chars] # cap at max_chars to save tokens
+    except Exception:
+        return "" # if a page fails, silently skips it
+
+
 def search_web(query: str, existing_sources: list) -> tuple[str, list]:
     with DDGS() as ddgs:
         results = list(ddgs.text(query, max_results=5, region="wt-wt"))
@@ -40,7 +68,14 @@ def search_web(query: str, existing_sources: list) -> tuple[str, list]:
 
             # Give model a source number it can cite
             source_num = existing_sources.index(r["href"]) + 1
-            formatted += f"[{source_num}] {r['title']}\nURL: {r['href']}\n{r['body']}\n\n"
+
+            # Try to fetch full page content
+            page_content = fetch_page(r["href"])
+
+            # Fall back to DDG Snippet if page fetch fails
+            content = page_content if page_content else r['body']
+
+            formatted += f"[{source_num}] {r['title']}\nURL: {r['href']}\n{content}\n\n"
     
     return formatted, new_sources
 
