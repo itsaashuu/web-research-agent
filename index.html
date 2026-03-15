@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Research Agent</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0c0c0e;
+      --surface: #141416;
+      --border: #242428;
+      --border-active: #3a3a42;
+      --text: #e8e6e1;
+      --muted: #6b6a66;
+      --accent: #c8b560;
+      --accent-dim: rgba(200, 181, 96, 0.12);
+      --teal: #5cbfaa;
+      --teal-dim: rgba(92, 191, 170, 0.1);
+      --font-serif: 'Instrument Serif', Georgia, serif;
+      --font-mono: 'DM Mono', monospace;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    /* Subtle grid background */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .shell {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 60px 32px 100px;
+    }
+
+    /* Header */
+    header {
+      margin-bottom: 56px;
+    }
+
+    .wordmark {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+
+    .wordmark-title {
+      font-family: var(--font-serif);
+      font-size: 28px;
+      font-style: italic;
+      color: var(--text);
+      letter-spacing: -0.5px;
+    }
+
+    .wordmark-badge {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+      color: var(--accent);
+      background: var(--accent-dim);
+      border: 1px solid rgba(200, 181, 96, 0.25);
+      border-radius: 3px;
+      padding: 2px 7px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .tagline {
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.03em;
+    }
+
+    /* Input area */
+    .input-section {
+      margin-bottom: 40px;
+    }
+
+    .input-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 10px;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .question-input {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 14px;
+      padding: 14px 16px;
+      resize: none;
+      outline: none;
+      min-height: 52px;
+      max-height: 160px;
+      transition: border-color 0.2s;
+      line-height: 1.6;
+    }
+
+    .question-input::placeholder { color: var(--muted); }
+
+    .question-input:focus {
+      border-color: var(--border-active);
+    }
+
+    .run-btn {
+      background: var(--accent);
+      color: #1a1800;
+      border: none;
+      border-radius: 6px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 0 20px;
+      height: 52px;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.1s;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .run-btn:hover { opacity: 0.88; }
+    .run-btn:active { transform: scale(0.97); }
+    .run-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Status bar */
+    .status-bar {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 32px;
+      padding: 10px 14px;
+      background: var(--teal-dim);
+      border: 1px solid rgba(92, 191, 170, 0.2);
+      border-radius: 6px;
+      font-size: 12px;
+      color: var(--teal);
+    }
+
+    .status-bar.visible { display: flex; }
+
+    .pulse {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--teal);
+      animation: pulse 1.2s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.75); }
+    }
+
+    /* Result */
+    .result-section {
+      display: none;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    .result-section.visible {
+      display: block;
+    }
+
+    .result-section.shown {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .result-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .result-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .search-pill {
+      font-size: 11px;
+      color: var(--accent);
+      background: var(--accent-dim);
+      border: 1px solid rgba(200, 181, 96, 0.2);
+      border-radius: 3px;
+      padding: 2px 8px;
+    }
+
+    .answer-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px 28px;
+      margin-bottom: 24px;
+    }
+
+    .answer-text {
+      font-family: var(--font-serif);
+      font-size: 17px;
+      line-height: 1.8;
+      color: var(--text);
+      white-space: pre-wrap;
+    }
+
+    /* Sources */
+    .sources-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 10px;
+    }
+
+    .sources-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .source-item {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      padding: 9px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      transition: border-color 0.15s;
+    }
+
+    .source-item:hover { border-color: var(--border-active); }
+
+    .source-index {
+      font-size: 11px;
+      color: var(--accent);
+      font-weight: 500;
+      flex-shrink: 0;
+      min-width: 22px;
+    }
+
+    .source-url {
+      font-size: 12px;
+      color: var(--muted);
+      text-decoration: none;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      transition: color 0.15s;
+    }
+
+    .source-url:hover { color: var(--text); }
+
+    /* Error */
+    .error-box {
+      display: none;
+      padding: 14px 18px;
+      background: rgba(220, 80, 60, 0.08);
+      border: 1px solid rgba(220, 80, 60, 0.25);
+      border-radius: 6px;
+      font-size: 13px;
+      color: #e07060;
+      margin-bottom: 24px;
+    }
+
+    .error-box.visible { display: block; }
+
+    /* Divider */
+    .divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 40px 0;
+    }
+
+    /* History */
+    .history-section { display: none; }
+    .history-section.visible { display: block; }
+
+    .history-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 14px;
+    }
+
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .history-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+
+    .history-item:hover { border-color: var(--border-active); }
+
+    .history-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+
+    .history-q {
+      font-size: 13px;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* Footer */
+    footer {
+      margin-top: 80px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+<div class="shell">
+
+  <header>
+    <div class="wordmark">
+      <span class="wordmark-title">Research Agent</span>
+      <span class="wordmark-badge">LangGraph</span>
+    </div>
+    <p class="tagline">// multi-search · citations · gemini-3.1-flash-lite</p>
+  </header>
+
+  <section class="input-section">
+    <div class="input-label">// query</div>
+    <div class="input-row">
+      <textarea
+        class="question-input"
+        id="questionInput"
+        placeholder="Ask anything that needs research..."
+        rows="1"
+        onkeydown="handleKey(event)"
+        oninput="autoResize(this)"
+      ></textarea>
+      <button class="run-btn" id="runBtn" onclick="runResearch()">Run →</button>
+    </div>
+  </section>
+
+  <div class="status-bar" id="statusBar">
+    <div class="pulse"></div>
+    <span id="statusText">Initializing agent...</span>
+  </div>
+
+  <div class="error-box" id="errorBox"></div>
+
+  <section class="result-section" id="resultSection">
+    <div class="result-meta">
+      <div class="result-label">// answer</div>
+      <div class="search-pill" id="searchPill"></div>
+    </div>
+    <div class="answer-box">
+      <div class="answer-text" id="answerText"></div>
+    </div>
+
+    <div class="sources-label">// sources</div>
+    <div class="sources-list" id="sourcesList"></div>
+  </section>
+
+  <hr class="divider" id="historyDivider" style="display:none"/>
+
+  <section class="history-section" id="historySection">
+    <div class="history-label">// previous queries</div>
+    <div class="history-list" id="historyList"></div>
+  </section>
+
+  <footer>
+    <span>web-research-agent</span>
+    <span id="footerStatus">ready</span>
+  </footer>
+
+</div>
+
+<script>
+  const API_URL = 'http://127.0.0.1:8000/research';
+  const history = [];
+
+  function autoResize(el) {
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      runResearch();
+    }
+  }
+
+  function setStatus(text) {
+    document.getElementById('statusText').textContent = text;
+  }
+
+  async function runResearch() {
+    const input = document.getElementById('questionInput');
+    const question = input.value.trim();
+    if (!question) return;
+
+    const btn = document.getElementById('runBtn');
+    const statusBar = document.getElementById('statusBar');
+    const resultSection = document.getElementById('resultSection');
+    const errorBox = document.getElementById('errorBox');
+
+    // Reset UI
+    btn.disabled = true;
+    errorBox.classList.remove('visible');
+    resultSection.classList.remove('visible', 'shown');
+    statusBar.classList.add('visible');
+    document.getElementById('footerStatus').textContent = 'running...';
+
+    // Cycle status messages while waiting
+    const statuses = [
+      'Initializing agent...',
+      'Formulating search queries...',
+      'Searching the web...',
+      'Evaluating results...',
+      'Refining search...',
+      'Synthesizing answer...',
+    ];
+    let si = 0;
+    setStatus(statuses[si]);
+    const statusInterval = setInterval(() => {
+      si = (si + 1) % statuses.length;
+      setStatus(statuses[si]);
+    }, 2200);
+
+    try {
+      const res = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question })
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(`Server error ${res.status}: ${err}`);
+      }
+
+      const data = await res.json();
+
+      // Populate result
+      document.getElementById('answerText').textContent = data.answer;
+      document.getElementById('searchPill').textContent =
+        `${data.search_count} search${data.search_count !== 1 ? 'es' : ''}`;
+
+      const sourcesList = document.getElementById('sourcesList');
+      sourcesList.innerHTML = '';
+      if (data.sources && data.sources.length > 0) {
+        data.sources.forEach((url, i) => {
+          const item = document.createElement('div');
+          item.className = 'source-item';
+          item.innerHTML = `
+            <span class="source-index">[${i + 1}]</span>
+            <a class="source-url" href="${url}" target="_blank" title="${url}">${url}</a>
+          `;
+          sourcesList.appendChild(item);
+        });
+      } else {
+        sourcesList.innerHTML = '<div class="source-item"><span class="source-url">No sources collected</span></div>';
+      }
+
+      // Show result with animation
+      resultSection.classList.add('visible');
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => resultSection.classList.add('shown'));
+      });
+
+      // Add to history
+      addToHistory(question);
+      input.value = '';
+      input.style.height = 'auto';
+      document.getElementById('footerStatus').textContent = 'done';
+
+    } catch (err) {
+      errorBox.textContent = `Error: ${err.message}`;
+      errorBox.classList.add('visible');
+      document.getElementById('footerStatus').textContent = 'error';
+    } finally {
+      clearInterval(statusInterval);
+      statusBar.classList.remove('visible');
+      btn.disabled = false;
+    }
+  }
+
+  function addToHistory(question) {
+    history.unshift(question);
+    const section = document.getElementById('historySection');
+    const divider = document.getElementById('historyDivider');
+    const list = document.getElementById('historyList');
+
+    section.classList.add('visible');
+    divider.style.display = 'block';
+    list.innerHTML = '';
+
+    history.slice(0, 6).forEach(q => {
+      const item = document.createElement('div');
+      item.className = 'history-item';
+      item.innerHTML = `
+        <div class="history-dot"></div>
+        <div class="history-q">${q}</div>
+      `;
+      item.onclick = () => {
+        document.getElementById('questionInput').value = q;
+        autoResize(document.getElementById('questionInput'));
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      };
+      list.appendChild(item);
+    });
+  }
+</script>
+</body>
+</html>
